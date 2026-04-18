@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Archive,
   Bot,
   CalendarDays,
+  CornerUpLeft,
+  Forward,
+  Inbox,
   LoaderCircle,
   Mail,
   MessageSquareText,
+  MoreVertical,
   Pencil,
   Plus,
+  Printer,
   SendHorizonal,
+  Star,
   Trash2,
 } from "lucide-react";
 
@@ -183,41 +190,100 @@ function TextThread({
   );
 }
 
-function EmailThread({ messages }: { messages: Message[] }) {
+function EmailThread({
+  messages,
+  scenario,
+}: {
+  messages: Message[];
+  scenario: Scenario | null;
+}) {
+  const subject = scenario ? scenarioTitle(scenario) : "alfred_ draft";
+
   return (
-    <div className="space-y-3 p-4">
-      {messages.map((message, index) => {
-        const mine = message.role === "user";
-        return (
-          <div
-            key={index}
-            className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5"
-          >
-            <div className="mb-3 flex items-center gap-3">
-              <div
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
-                  mine
-                    ? "bg-primary/15 text-primary"
-                    : "bg-secondary text-foreground",
-                )}
-              >
-                {mine ? "U" : "A"}
+    <div className="bg-[#202124] text-[#e8eaed]">
+      <div className="flex items-center gap-2 border-b border-white/5 px-6 py-3 text-[#9aa0a6]">
+        <Archive className="h-4 w-4" />
+        <Trash2 className="h-4 w-4" />
+        <Inbox className="h-4 w-4" />
+        <span className="flex-1" />
+        <MoreVertical className="h-4 w-4" />
+      </div>
+
+      <div className="flex items-start justify-between gap-3 px-6 pt-5">
+        <div>
+          <h3 className="text-xl font-normal text-white">{subject}</h3>
+          <span className="mt-2 inline-flex items-center rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-[#e8eaed]">
+            Inbox
+          </span>
+        </div>
+        <div className="flex items-center gap-3 pt-1 text-[#9aa0a6]">
+          <Printer className="h-4 w-4" />
+          <Forward className="h-4 w-4 rotate-180" />
+        </div>
+      </div>
+
+      <div className="mt-2 divide-y divide-white/5">
+        {messages.map((message, index) => {
+          const mine = message.role === "user";
+          const name = mine ? "You" : "alfred_";
+          const handle = mine ? "you@gmail.com" : "alfred@assistant.ai";
+          const avatarClass = mine
+            ? "bg-[#1a73e8] text-white"
+            : "bg-[#9334e6] text-white";
+
+          return (
+            <div key={index} className="px-6 py-5">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium",
+                      avatarClass,
+                    )}
+                  >
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-sm font-medium text-white">{name}</span>
+                      <span className="text-xs text-[#9aa0a6]">&lt;{handle}&gt;</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-[#9aa0a6]">
+                      {mine ? "to alfred_" : "to me"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-[#9aa0a6]">
+                  <span>just now</span>
+                  <Star className="h-4 w-4" />
+                  <CornerUpLeft className="h-4 w-4" />
+                  <MoreVertical className="h-4 w-4" />
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">{mine ? "You" : "alfred_"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {mine ? "to alfred_" : "reply draft"}
-                </p>
-              </div>
-              <span className="text-xs text-muted-foreground">now</span>
+              <p className="whitespace-pre-wrap pl-[52px] text-sm leading-7 text-[#e8eaed]">
+                {message.content || <span className="opacity-60">(empty)</span>}
+              </p>
             </div>
-            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-100">
-              {message.content || <span className="opacity-60">(empty)</span>}
-            </p>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-3 border-t border-white/5 px-6 py-4">
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-[#e8eaed] transition-colors hover:bg-white/10"
+        >
+          <CornerUpLeft className="h-3.5 w-3.5" />
+          Reply
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs text-[#e8eaed] transition-colors hover:bg-white/10"
+        >
+          <Forward className="h-3.5 w-3.5" />
+          Forward
+        </button>
+      </div>
     </div>
   );
 }
@@ -258,7 +324,8 @@ function CalendarPreview({ scenario, action, messages }: ThreadProps) {
 }
 
 function ConversationSurface(props: ThreadProps) {
-  if (props.surface === "email") return <EmailThread messages={props.messages} />;
+  if (props.surface === "email")
+    return <EmailThread messages={props.messages} scenario={props.scenario} />;
   if (props.surface === "calendar") return <CalendarPreview {...props} />;
   return <TextThread messages={props.messages} scenario={props.scenario} />;
 }
@@ -488,7 +555,11 @@ export default function App() {
                 <div
                   className={cn(
                     "border-b border-slate-800",
-                    surface === "text" ? "bg-black" : "bg-slate-950/40",
+                    surface === "text"
+                      ? "bg-black"
+                      : surface === "email"
+                        ? "bg-[#202124]"
+                        : "bg-slate-950/40",
                   )}
                 >
                   <ConversationSurface
