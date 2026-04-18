@@ -455,8 +455,8 @@ export default function App() {
           <Badge variant="outline">{scenarios.length || 0} scenarios</Badge>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[300px,1fr]">
-          <Card className="overflow-hidden">
+        <div className="grid items-start gap-6 lg:grid-cols-[300px,1fr]">
+          <Card className="self-start overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Scenarios</CardTitle>
               <CardDescription className="text-xs">
@@ -464,7 +464,7 @@ export default function App() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-2 pb-2 pt-0">
-              <ScrollArea className="h-[640px] pr-2">
+              <div className="scenario-scroll h-[640px] overflow-y-auto overflow-x-hidden pr-1">
                 <div className="space-y-2 pb-2">
                   {scenarios.map((scenario) => {
                     const info = surfaceMeta(surfaceOf(scenario));
@@ -476,7 +476,7 @@ export default function App() {
                         type="button"
                         onClick={() => handleScenarioSelect(scenario)}
                         className={cn(
-                          "w-full rounded-2xl border p-3 text-left transition-colors",
+                          "block w-full overflow-hidden rounded-2xl border p-3 text-left transition-colors",
                           active
                             ? "border-primary bg-primary/10"
                             : "border-slate-800 hover:bg-slate-900/70",
@@ -490,20 +490,19 @@ export default function App() {
                             <div className="flex items-center gap-1.5">
                               <span
                                 className={cn(
-                                  "h-1.5 w-1.5 rounded-full",
+                                  "h-1.5 w-1.5 shrink-0 rounded-full",
                                   categoryDotMap[scenario.category] ?? "bg-slate-500",
                                 )}
                               />
                               <span className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                                {categoryLabelMap[scenario.category] ?? scenario.category} ·
-                                {" "}
+                                {categoryLabelMap[scenario.category] ?? scenario.category} ·{" "}
                                 {info.label}
                               </span>
                             </div>
-                            <p className="mt-1 truncate text-sm font-medium text-slate-100">
+                            <p className="mt-1 break-words text-sm font-medium leading-5 text-slate-100">
                               {scenarioTitle(scenario)}
                             </p>
-                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                            <p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-muted-foreground">
                               {scenarioPreview(scenario)}
                             </p>
                           </div>
@@ -515,7 +514,7 @@ export default function App() {
                     <p className="px-2 text-sm text-destructive">{loadError}</p>
                   ) : null}
                 </div>
-              </ScrollArea>
+              </div>
             </CardContent>
           </Card>
 
