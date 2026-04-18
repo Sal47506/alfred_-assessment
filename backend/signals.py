@@ -384,7 +384,6 @@ def make_decision(request: DecideRequest) -> AgentResponse:
 
     return AgentResponse(
         decision=final_decision,
-        raw_output=raw_output,
         rationale=rationale,
         prompt_sent=prompt,
         signals=signals,

@@ -34,7 +34,6 @@ export interface Signals {
 
 export interface DecisionResponse {
   decision: DecisionValue;
-  raw_output: string;
   rationale: string;
   prompt_sent: string;
   signals: Signals;

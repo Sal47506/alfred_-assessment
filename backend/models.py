@@ -45,7 +45,6 @@ class Signals(BaseModel):
 
 class AgentResponse(BaseModel):
     decision: Decision
-    raw_output: str
     rationale: str
     prompt_sent: str
     signals: Signals

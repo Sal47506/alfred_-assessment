@@ -1,5 +1,15 @@
-import { useEffect, useState } from "react";
-import { Bot, CalendarDays, LoaderCircle, Mail, MessageSquareText, Plus, SendHorizonal, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bot,
+  CalendarDays,
+  LoaderCircle,
+  Mail,
+  MessageSquareText,
+  Pencil,
+  Plus,
+  SendHorizonal,
+  Trash2,
+} from "lucide-react";
 
 import { fetchScenarios, runDecision } from "@/lib/api";
 import type {
@@ -12,10 +22,28 @@ import type {
   Scenario,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -42,10 +70,16 @@ const decisionVariantMap: Record<
   refuse: "destructive",
 };
 
-const categoryVariantMap: Record<string, "default" | "warning" | "destructive"> = {
-  easy: "default",
-  ambiguous: "warning",
-  adversarial: "destructive",
+const categoryDotMap: Record<string, string> = {
+  easy: "bg-emerald-400",
+  ambiguous: "bg-amber-400",
+  adversarial: "bg-rose-400",
+};
+
+const categoryLabelMap: Record<string, string> = {
+  easy: "Easy",
+  ambiguous: "Ambiguous",
+  adversarial: "Adversarial",
 };
 
 const decisionHeadlineMap: Record<DecisionValue, string> = {
@@ -58,6 +92,14 @@ const decisionHeadlineMap: Record<DecisionValue, string> = {
 
 function formatLabel(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function formatModelStatus(status: string) {
+  return status.replace(/_/g, " ");
+}
+
+function summarizeList(items: string[]) {
+  return items.length > 0 ? items.join(", ") : "None";
 }
 
 function requestFromScenario(scenario: Scenario): DecisionRequest {
@@ -73,44 +115,133 @@ function preClassName(extra?: string) {
   return cn("rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100", extra);
 }
 
-function getScenarioSurface(scenario: Scenario) {
-  return scenario.surface ?? "text";
+function surfaceOf(scenario: Scenario | null) {
+  return scenario?.surface ?? "text";
 }
 
-function getScenarioTitle(scenario: Scenario) {
-  return scenario.title ?? scenario.label;
-}
-
-function getScenarioPreview(scenario: Scenario) {
-  return scenario.preview ?? scenario.conversation_history[0]?.content ?? scenario.action;
-}
-
-function getSurfaceMeta(surface: string) {
-  if (surface === "email") {
-    return { label: "Email", icon: Mail };
-  }
-
-  if (surface === "calendar") {
-    return { label: "Calendar", icon: CalendarDays };
-  }
-
+function surfaceMeta(surface: string) {
+  if (surface === "email") return { label: "Email", icon: Mail };
+  if (surface === "calendar") return { label: "Calendar", icon: CalendarDays };
   return { label: "Text", icon: MessageSquareText };
 }
 
-function formatModelStatus(status: string) {
-  return status.replace(/_/g, " ");
+function scenarioTitle(scenario: Scenario) {
+  return scenario.title ?? scenario.label;
 }
 
-function summarizeList(items: string[]) {
-  return items.length > 0 ? items.join(", ") : "None";
+function scenarioPreview(scenario: Scenario) {
+  return scenario.preview ?? scenario.conversation_history[0]?.content ?? scenario.action;
 }
 
-function parseRawOutput(rawOutput: string) {
-  try {
-    return JSON.parse(rawOutput) as { decision?: string; rationale?: string };
-  } catch {
-    return null;
-  }
+type ThreadProps = {
+  messages: Message[];
+  surface: string;
+  scenario: Scenario | null;
+  action: string;
+};
+
+function TextThread({ messages }: { messages: Message[] }) {
+  return (
+    <div className="space-y-2 px-4 py-5">
+      {messages.map((message, index) => {
+        const mine = message.role === "user";
+        return (
+          <div key={index} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+            <div
+              className={cn(
+                "max-w-[78%] whitespace-pre-wrap break-words rounded-[22px] px-4 py-2.5 text-sm leading-6 shadow-sm",
+                mine
+                  ? "rounded-br-md bg-primary text-primary-foreground"
+                  : "rounded-bl-md bg-secondary text-secondary-foreground",
+              )}
+            >
+              {message.content || <span className="opacity-60">(empty)</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmailThread({ messages }: { messages: Message[] }) {
+  return (
+    <div className="space-y-3 p-4">
+      {messages.map((message, index) => {
+        const mine = message.role === "user";
+        return (
+          <div
+            key={index}
+            className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5"
+          >
+            <div className="mb-3 flex items-center gap-3">
+              <div
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
+                  mine
+                    ? "bg-primary/15 text-primary"
+                    : "bg-secondary text-foreground",
+                )}
+              >
+                {mine ? "U" : "A"}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">{mine ? "You" : "alfred_"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {mine ? "to alfred_" : "reply draft"}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">now</span>
+            </div>
+            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-100">
+              {message.content || <span className="opacity-60">(empty)</span>}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CalendarPreview({ scenario, action, messages }: ThreadProps) {
+  const when = /\b(\d{1,2}(?::\d{2})?\s?(?:am|pm)?)\b/i.exec(action)?.[1];
+  const target =
+    /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(action)?.[0] ||
+    scenario?.label ||
+    "alfred_ invitee";
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 flex-col items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <span className="text-[10px] uppercase tracking-[0.18em]">Event</span>
+            <CalendarDays className="mt-1 h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              Calendar invite
+            </p>
+            <p className="mt-1 truncate text-lg font-medium text-slate-100">
+              {scenario ? scenarioTitle(scenario) : action}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {when ? `Scheduled for ${when}` : "Time to be confirmed"}
+              {" · with "}
+              {target}
+            </p>
+          </div>
+        </div>
+      </div>
+      <TextThread messages={messages} />
+    </div>
+  );
+}
+
+function ConversationSurface(props: ThreadProps) {
+  if (props.surface === "email") return <EmailThread messages={props.messages} />;
+  if (props.surface === "calendar") return <CalendarPreview {...props} />;
+  return <TextThread messages={props.messages} />;
 }
 
 export default function App() {
@@ -122,15 +253,17 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const seededScenarios = await fetchScenarios();
-        setScenarios(seededScenarios);
-        if (seededScenarios.length > 0) {
-          setActiveScenarioId(seededScenarios[0].id);
-          setPayload(requestFromScenario(seededScenarios[0]));
+        const seeded = await fetchScenarios();
+        setScenarios(seeded);
+        if (seeded.length > 0) {
+          setActiveScenarioId(seeded[0].id);
+          setPayload(requestFromScenario(seeded[0]));
         }
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : "Unable to load scenarios.");
@@ -140,11 +273,21 @@ export default function App() {
     void load();
   }, []);
 
+  const activeScenario = useMemo(
+    () => scenarios.find((scenario) => scenario.id === activeScenarioId) ?? null,
+    [scenarios, activeScenarioId],
+  );
+
+  const surface = surfaceOf(activeScenario);
+  const surfaceInfo = surfaceMeta(surface);
+  const SurfaceIcon = surfaceInfo.icon;
+
   const handleScenarioSelect = (scenario: Scenario) => {
     setActiveScenarioId(scenario.id);
     setPayload(requestFromScenario(scenario));
     setResult(null);
     setSubmitError(null);
+    setIsEditing(false);
   };
 
   const updateMessage = (index: number, patch: Partial<Message>) => {
@@ -179,12 +322,17 @@ export default function App() {
     setLastSubmittedPayload(emptyRequest);
     setResult(null);
     setSubmitError(null);
+    setIsEditing(true);
   };
 
   const submit = async () => {
     setIsLoading(true);
     setSubmitError(null);
-    setLastSubmittedPayload({ ...payload, conversation_history: [...payload.conversation_history] });
+    setDialogOpen(true);
+    setLastSubmittedPayload({
+      ...payload,
+      conversation_history: [...payload.conversation_history],
+    });
 
     try {
       const response = await runDecision(payload);
@@ -196,7 +344,13 @@ export default function App() {
     }
   };
 
-  const parsedRawOutput = result?.raw_output ? parseRawOutput(result.raw_output) : null;
+  const headerSubtitle = activeScenario
+    ? (() => {
+        if (surface === "email") return `Email thread · ${scenarioTitle(activeScenario)}`;
+        if (surface === "calendar") return `Calendar invite · ${scenarioTitle(activeScenario)}`;
+        return `Text thread · ${scenarioTitle(activeScenario)}`;
+      })()
+    : "New thread";
 
   return (
     <div className="min-h-screen bg-background">
@@ -204,407 +358,473 @@ export default function App() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="text-sm font-semibold tracking-wide text-primary">alfred_</div>
-            <h1 className="text-3xl font-semibold tracking-tight">Execution decisions that feel product-native.</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              Execution decisions that feel product-native.
+            </h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Pick a realistic text or email scenario, tweak the context, and see how alfred_ should act.
+              Pick a realistic text, email, or calendar thread. alfred_ picks silent, notify,
+              confirm, clarify, or refuse.
             </p>
           </div>
-          <Badge variant="outline">6 scenarios loaded</Badge>
+          <Badge variant="outline">{scenarios.length || 0} scenarios</Badge>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Scenarios</CardTitle>
-                <CardDescription>Styled like the kinds of threads alfred_ would actually see.</CardDescription>
-              </CardHeader>
-              <CardContent className="px-3 pb-3 pt-0">
-                <ScrollArea className="h-[640px]">
-                  <div className="space-y-2">
-                    {scenarios.map((scenario) => {
-                      const surface = getSurfaceMeta(getScenarioSurface(scenario));
-                      const Icon = surface.icon;
-
-                      return (
-                        <button
-                          key={scenario.id}
-                          type="button"
-                          onClick={() => handleScenarioSelect(scenario)}
-                          className={cn(
-                            "w-full rounded-2xl border p-4 text-left transition-colors",
-                            activeScenarioId === scenario.id
-                              ? "border-primary bg-primary/10"
-                              : "border-slate-800 hover:bg-slate-900/70",
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-slate-950">
-                              <Icon className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="mb-1 flex items-center justify-between gap-2">
-                                <p className="truncate text-sm font-medium">{scenario.label}</p>
-                                <Badge variant={categoryVariantMap[scenario.category] ?? "default"}>
-                                  {scenario.category}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-slate-100">{getScenarioTitle(scenario)}</p>
-                              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                {getScenarioPreview(scenario)}
-                              </p>
-                              <p className="mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                {surface.label}
-                              </p>
-                            </div>
+        <div className="grid gap-6 lg:grid-cols-[300px,1fr]">
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Scenarios</CardTitle>
+              <CardDescription className="text-xs">
+                Threads alfred_ would actually see.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-2 pb-2 pt-0">
+              <ScrollArea className="h-[640px] pr-2">
+                <div className="space-y-2 pb-2">
+                  {scenarios.map((scenario) => {
+                    const info = surfaceMeta(surfaceOf(scenario));
+                    const Icon = info.icon;
+                    const active = activeScenarioId === scenario.id;
+                    return (
+                      <button
+                        key={scenario.id}
+                        type="button"
+                        onClick={() => handleScenarioSelect(scenario)}
+                        className={cn(
+                          "w-full rounded-2xl border p-3 text-left transition-colors",
+                          active
+                            ? "border-primary bg-primary/10"
+                            : "border-slate-800 hover:bg-slate-900/70",
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-800 bg-slate-950">
+                            <Icon className="h-4 w-4 text-primary" />
                           </div>
-                        </button>
-                      );
-                    })}
-                    {loadError ? <p className="px-2 text-sm text-destructive">{loadError}</p> : null}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "h-1.5 w-1.5 rounded-full",
+                                  categoryDotMap[scenario.category] ?? "bg-slate-500",
+                                )}
+                              />
+                              <span className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                                {categoryLabelMap[scenario.category] ?? scenario.category} ·
+                                {" "}
+                                {info.label}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-sm font-medium text-slate-100">
+                              {scenarioTitle(scenario)}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                              {scenarioPreview(scenario)}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {loadError ? (
+                    <p className="px-2 text-sm text-destructive">{loadError}</p>
+                  ) : null}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Tell alfred_ what to do</CardTitle>
-                <CardDescription>
-                  Action, conversation history, and optional user state stay together in one lightweight composer.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 lg:grid-cols-[1.1fr,0.9fr]">
-                  <div className="space-y-2">
-                    <Label htmlFor="action">Proposed action</Label>
-                    <Input
-                      id="action"
-                      value={payload.action}
-                      placeholder="Send the drafted reply to Acme"
-                      onChange={(event) =>
-                        setPayload((current) => ({ ...current, action: event.target.value }))
-                      }
-                    />
+            <Card className="overflow-hidden">
+              <CardHeader className="border-b border-slate-800 pb-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-slate-950">
+                      <SurfaceIcon className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">
+                        {activeScenario ? activeScenario.label : "Custom thread"}
+                      </CardTitle>
+                      <CardDescription className="text-xs">{headerSubtitle}</CardDescription>
+                    </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="user-state">User state (optional)</Label>
-                    <Input
-                      id="user-state"
-                      value={payload.user_state ?? ""}
-                      placeholder="External pricing emails should always be confirmed"
-                      onChange={(event) =>
-                        setPayload((current) => ({ ...current, user_state: event.target.value }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Conversation</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addMessage}>
-                      <Plus className="h-4 w-4" />
-                      Add message
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant={isEditing ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setIsEditing((value) => !value)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      {isEditing ? "Done editing" : "Edit"}
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={resetForm}>
+                      New
                     </Button>
                   </div>
+                </div>
+              </CardHeader>
 
-                  <div className="space-y-3">
-                    {payload.conversation_history.map((message, index) => (
-                      <div key={index} className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <select
-                            className={selectClassName}
-                            value={message.role}
+              <CardContent className="space-y-5 p-0">
+                <div className="border-b border-slate-800 bg-slate-950/40">
+                  <ConversationSurface
+                    messages={payload.conversation_history}
+                    surface={surface}
+                    scenario={activeScenario}
+                    action={payload.action}
+                  />
+                </div>
+
+                <div className="space-y-4 px-5 pb-5">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Proposed action
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-slate-100">
+                      {payload.action || "Describe what should happen next."}
+                    </p>
+                    {payload.user_state ? (
+                      <>
+                        <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          User state
+                        </p>
+                        <p className="mt-1 text-sm text-slate-100">{payload.user_state}</p>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {isEditing ? (
+                    <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="action">Proposed action</Label>
+                          <Input
+                            id="action"
+                            value={payload.action}
+                            placeholder="Send the drafted reply to Acme"
                             onChange={(event) =>
-                              updateMessage(index, { role: event.target.value as Role })
+                              setPayload((current) => ({
+                                ...current,
+                                action: event.target.value,
+                              }))
                             }
-                          >
-                            <option value="user">user</option>
-                            <option value="assistant">assistant</option>
-                            <option value="system">system</option>
-                          </select>
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="user-state">User state (optional)</Label>
+                          <Input
+                            id="user-state"
+                            value={payload.user_state ?? ""}
+                            placeholder="External pricing emails should always be confirmed"
+                            onChange={(event) =>
+                              setPayload((current) => ({
+                                ...current,
+                                user_state: event.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Conversation</Label>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => removeMessage(index)}
+                            onClick={addMessage}
                           >
-                            <Trash2 className="h-4 w-4" />
-                            Remove
+                            <Plus className="h-4 w-4" />
+                            Add message
                           </Button>
                         </div>
-                        <Textarea
-                          value={message.content}
-                          onChange={(event) => updateMessage(index, { content: event.target.value })}
-                          placeholder="Write the relevant message here"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <details className="rounded-2xl border border-slate-800 p-4">
-                  <summary className="cursor-pointer text-sm font-medium">Failure path demo</summary>
-                  <div className="mt-4 space-y-2">
-                    <Label htmlFor="failure-mode">Show what happens when the model fails</Label>
-                    <select
-                      id="failure-mode"
-                      className={selectClassName}
-                      value={payload.simulate_failure}
-                      onChange={(event) =>
-                        setPayload((current) => ({
-                          ...current,
-                          simulate_failure: event.target.value as FailureMode,
-                        }))
-                      }
-                    >
-                      <option value="none">None</option>
-                      <option value="timeout">LLM timeout</option>
-                      <option value="malformed">Malformed model output</option>
-                    </select>
-                  </div>
-                </details>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    type="button"
-                    onClick={submit}
-                    disabled={isLoading || !payload.action.trim()}
-                    className="min-w-[190px]"
-                  >
-                    {isLoading ? (
-                      <>
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                        Running
-                      </>
-                    ) : (
-                      <>
-                        <SendHorizonal className="h-4 w-4" />
-                        Run decision
-                      </>
-                    )}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={resetForm}>
-                    Reset
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>alfred_'s call</CardTitle>
-                <CardDescription>
-                  The verdict stays conversational. The deeper pipeline is still available below it.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
-
-                {result ? (
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
-                    <div className="mb-4 flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-card">
-                        <Bot className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">alfred_</p>
-                        <p className="text-xs text-muted-foreground">Decision layer response</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-4 flex flex-wrap items-center gap-2">
-                      <Badge variant={decisionVariantMap[result.decision]}>
-                        {formatLabel(result.decision)}
-                      </Badge>
-                      <Badge variant="outline">{formatModelStatus(result.model_status)}</Badge>
-                    </div>
-
-                    <p className="text-xl font-medium leading-8">{decisionHeadlineMap[result.decision]}</p>
-                    <p className="mt-3 text-sm leading-7 text-slate-300">{result.rationale}</p>
-                    {result.fallback_reason ? (
-                      <p className="mt-3 text-sm text-muted-foreground">{result.fallback_reason}</p>
-                    ) : null}
-
-                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl border border-slate-800 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Risk score</p>
-                        <p className="mt-2 text-lg font-medium">{result.signals.risk_score}/10</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-800 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inferred action</p>
-                        <p className="mt-2 text-lg font-medium">{formatLabel(result.signals.inferred_action)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-slate-800 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Deterministic floor</p>
-                        <p className="mt-2 text-lg font-medium">
-                          {formatLabel(result.signals.deterministic_decision)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-800 p-6 text-sm text-muted-foreground">
-                    Choose a scenario or write your own thread to see the decision here.
-                  </div>
-                )}
-
-                <Card className="border-slate-800 bg-transparent shadow-none">
-                  <CardHeader>
-                    <CardTitle className="text-lg">Under the hood</CardTitle>
-                    <CardDescription>
-                      Everything required by the prompt is still here, but presented as product-friendly cards.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <Accordion type="multiple" className="space-y-3">
-                      <AccordionItem value="inputs">
-                        <AccordionTrigger>Inputs</AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-4">
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Action</p>
-                              <p className="mt-2 text-sm text-slate-100">{lastSubmittedPayload.action || "None provided"}</p>
-                            </div>
-
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">User state</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {lastSubmittedPayload.user_state?.trim() || "No explicit user state provided."}
-                              </p>
-                            </div>
-
-                            <div className="space-y-3">
-                              {lastSubmittedPayload.conversation_history.map((message, index) => (
-                                <div
-                                  key={`${message.role}-${index}`}
-                                  className={cn(
-                                    "rounded-2xl border p-4",
-                                    message.role === "user"
-                                      ? "border-slate-800 bg-slate-950/60"
-                                      : "border-slate-800 bg-card",
-                                  )}
+                        <div className="space-y-3">
+                          {payload.conversation_history.map((message, index) => (
+                            <div
+                              key={index}
+                              className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4"
+                            >
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <select
+                                  className={selectClassName}
+                                  value={message.role}
+                                  onChange={(event) =>
+                                    updateMessage(index, { role: event.target.value as Role })
+                                  }
                                 >
-                                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                                    {message.role === "assistant" ? "alfred_" : message.role}
-                                  </p>
-                                  <p className="mt-2 text-sm leading-7 text-slate-100">{message.content}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="signals">
-                        <AccordionTrigger>Signals and rules</AccordionTrigger>
-                        <AccordionContent>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Missing params</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {summarizeList(result?.signals.missing_params ?? [])}
-                              </p>
-                            </div>
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Unresolved entities</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {summarizeList(result?.signals.unresolved_entities ?? [])}
-                              </p>
-                            </div>
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Contradiction detected</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {result?.signals.contradiction_detected ? "Yes" : "No"}
-                              </p>
-                            </div>
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Unsafe action</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {result?.signals.unsafe_action ? "Yes" : "No"}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 rounded-2xl border border-slate-800 p-4">
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rules triggered in code</p>
-                            <ul className="mt-3 space-y-2 text-sm text-slate-100">
-                              {(result?.triggered_rules ?? []).map((rule, index) => (
-                                <li key={index}>{rule}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="prompt">
-                        <AccordionTrigger>Exact prompt sent to the model</AccordionTrigger>
-                        <AccordionContent>
-                          <ScrollArea className="h-[280px]">
-                            <div className={preClassName("whitespace-pre-wrap")}>
-                              {result?.prompt_sent ?? "Run a decision to view the prompt."}
-                            </div>
-                          </ScrollArea>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="raw-output">
-                        <AccordionTrigger>Raw model output</AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-4">
-                            {parsedRawOutput ? (
-                              <div className="rounded-2xl border border-slate-800 p-4">
-                                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Decoded at a glance</p>
-                                <div className="mt-3 space-y-2 text-sm text-slate-100">
-                                  <p>decision: {parsedRawOutput.decision ?? "n/a"}</p>
-                                  <p>rationale: {parsedRawOutput.rationale ?? "n/a"}</p>
-                                </div>
+                                  <option value="user">user</option>
+                                  <option value="assistant">assistant</option>
+                                  <option value="system">system</option>
+                                </select>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeMessage(index)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Remove
+                                </Button>
                               </div>
-                            ) : null}
-                            <div className={preClassName("whitespace-pre-wrap")}>
-                              {result?.raw_output || "Run a decision to view raw output."}
+                              <Textarea
+                                value={message.content}
+                                onChange={(event) =>
+                                  updateMessage(index, { content: event.target.value })
+                                }
+                                placeholder="Write the relevant message here"
+                              />
                             </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
+                          ))}
+                        </div>
+                      </div>
 
-                      <AccordionItem value="parsed">
-                        <AccordionTrigger>Final parsed decision</AccordionTrigger>
-                        <AccordionContent>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Decision</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {result ? formatLabel(result.decision) : "No decision yet"}
-                              </p>
-                            </div>
-                            <div className="rounded-2xl border border-slate-800 p-4">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Model status</p>
-                              <p className="mt-2 text-sm text-slate-100">
-                                {result ? formatModelStatus(result.model_status) : "No decision yet"}
-                              </p>
-                            </div>
-                            <div className="rounded-2xl border border-slate-800 p-4 md:col-span-2">
-                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rationale</p>
-                              <p className="mt-2 text-sm leading-7 text-slate-100">
-                                {result?.rationale ?? "Run a decision to view the parsed rationale."}
-                              </p>
-                            </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </CardContent>
-                </Card>
+                      <details className="rounded-2xl border border-slate-800 p-4">
+                        <summary className="cursor-pointer text-sm font-medium">
+                          Failure path demo
+                        </summary>
+                        <div className="mt-4 space-y-2">
+                          <Label htmlFor="failure-mode">
+                            Show what happens when the model fails
+                          </Label>
+                          <select
+                            id="failure-mode"
+                            className={selectClassName}
+                            value={payload.simulate_failure}
+                            onChange={(event) =>
+                              setPayload((current) => ({
+                                ...current,
+                                simulate_failure: event.target.value as FailureMode,
+                              }))
+                            }
+                          >
+                            <option value="none">None</option>
+                            <option value="timeout">LLM timeout</option>
+                            <option value="malformed">Malformed model output</option>
+                          </select>
+                        </div>
+                      </details>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+                    <Button
+                      type="button"
+                      onClick={submit}
+                      disabled={isLoading || !payload.action.trim()}
+                      className="min-w-[200px]"
+                    >
+                      {isLoading ? (
+                        <>
+                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                          Running
+                        </>
+                      ) : (
+                        <>
+                          <SendHorizonal className="h-4 w-4" />
+                          Run decision
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>alfred_'s call</DialogTitle>
+            <DialogDescription>
+              Final decision first. Pipeline details live below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[68vh] pr-4">
+            <div className="space-y-5">
+              {isLoading && !result ? (
+                <div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-5 text-sm text-muted-foreground">
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  Running the decision pipeline…
+                </div>
+              ) : null}
+
+              {submitError ? (
+                <p className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  {submitError}
+                </p>
+              ) : null}
+
+              {result ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-card">
+                      <Bot className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">alfred_</p>
+                      <p className="text-xs text-muted-foreground">Decision layer response</p>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <Badge variant={decisionVariantMap[result.decision]}>
+                      {formatLabel(result.decision)}
+                    </Badge>
+                    <Badge variant="outline">{formatModelStatus(result.model_status)}</Badge>
+                  </div>
+
+                  <p className="text-lg font-medium leading-7">
+                    {decisionHeadlineMap[result.decision]}
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-slate-300">{result.rationale}</p>
+                  {result.fallback_reason ? (
+                    <p className="mt-3 text-sm text-muted-foreground">{result.fallback_reason}</p>
+                  ) : null}
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-800 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Risk
+                      </p>
+                      <p className="mt-2 text-lg font-medium">{result.signals.risk_score}/10</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-800 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Inferred action
+                      </p>
+                      <p className="mt-2 text-sm font-medium">
+                        {formatLabel(result.signals.inferred_action)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-800 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Deterministic floor
+                      </p>
+                      <p className="mt-2 text-sm font-medium">
+                        {formatLabel(result.signals.deterministic_decision)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {result ? (
+                <Accordion type="multiple" className="space-y-3">
+                  <AccordionItem value="inputs">
+                    <AccordionTrigger>Inputs</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-slate-800 p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Action
+                          </p>
+                          <p className="mt-2 text-sm text-slate-100">
+                            {lastSubmittedPayload.action || "None provided"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-800 p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            User state
+                          </p>
+                          <p className="mt-2 text-sm text-slate-100">
+                            {lastSubmittedPayload.user_state?.trim() ||
+                              "No explicit user state provided."}
+                          </p>
+                        </div>
+                        <div className="space-y-3">
+                          {lastSubmittedPayload.conversation_history.map((message, index) => (
+                            <div
+                              key={`${message.role}-${index}`}
+                              className={cn(
+                                "rounded-2xl border p-4",
+                                message.role === "user"
+                                  ? "border-slate-800 bg-slate-950/60"
+                                  : "border-slate-800 bg-card",
+                              )}
+                            >
+                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                                {message.role === "assistant" ? "alfred_" : message.role}
+                              </p>
+                              <p className="mt-2 text-sm leading-7 text-slate-100">
+                                {message.content}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="signals">
+                    <AccordionTrigger>Signals and rules</AccordionTrigger>
+                    <AccordionContent>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-2xl border border-slate-800 p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Missing params
+                          </p>
+                          <p className="mt-2 text-sm text-slate-100">
+                            {summarizeList(result.signals.missing_params)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-800 p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Unresolved entities
+                          </p>
+                          <p className="mt-2 text-sm text-slate-100">
+                            {summarizeList(result.signals.unresolved_entities)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-800 p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Contradiction
+                          </p>
+                          <p className="mt-2 text-sm text-slate-100">
+                            {result.signals.contradiction_detected ? "Yes" : "No"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-800 p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            Unsafe action
+                          </p>
+                          <p className="mt-2 text-sm text-slate-100">
+                            {result.signals.unsafe_action ? "Yes" : "No"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 rounded-2xl border border-slate-800 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          Rules triggered
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm text-slate-100">
+                          {result.triggered_rules.map((rule, index) => (
+                            <li key={index}>{rule}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="prompt">
+                    <AccordionTrigger>Exact prompt sent</AccordionTrigger>
+                    <AccordionContent>
+                      <ScrollArea className="h-[260px]">
+                        <div className={preClassName("whitespace-pre-wrap")}>
+                          {result.prompt_sent}
+                        </div>
+                      </ScrollArea>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              ) : null}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
