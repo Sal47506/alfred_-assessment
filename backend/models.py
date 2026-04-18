@@ -27,6 +27,7 @@ class DecideRequest(BaseModel):
     action: str
     conversation_history: List[Message]
     user_id: Optional[str] = None
+    user_state: Optional[str] = None
     simulate_failure: FailureMode = FailureMode.NONE
 
 

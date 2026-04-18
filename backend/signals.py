@@ -180,9 +180,11 @@ def compute_risk(
     full_text: str,
     unresolved_entities: list[str],
     contradiction_detected: bool,
+    user_state: Optional[str],
 ) -> tuple[int, bool]:
     risk = RISK_LEVELS.get(action, 3)
     unsafe_action = False
+    lowered_state = (user_state or "").lower()
 
     if action == "delete":
         risk += 1
@@ -197,6 +199,9 @@ def compute_risk(
         risk += 1
 
     if unresolved_entities:
+        risk += 1
+
+    if any(token in lowered_state for token in ("legal", "sensitive", "prefer confirm", "never silently")):
         risk += 1
 
     return min(risk, 10), unsafe_action
@@ -239,6 +244,7 @@ def build_signals(request: DecideRequest) -> tuple[Signals, list[str]]:
         f"{action_text} {full_text}",
         unresolved_entities,
         contradiction_detected,
+        request.user_state,
     )
     signals = Signals(
         inferred_action=action or "general",
@@ -281,6 +287,9 @@ Conversation History:
 
 Signals:
 {json.dumps(dump_model(signals), indent=2)}
+
+User State:
+{request.user_state or "none provided"}
 
 Deterministic rules already computed in code:
 {json.dumps(rules, indent=2)}

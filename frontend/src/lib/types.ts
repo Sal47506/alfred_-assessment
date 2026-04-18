@@ -16,6 +16,7 @@ export interface DecisionRequest {
   action: string;
   conversation_history: Message[];
   user_id?: string | null;
+  user_state?: string | null;
   simulate_failure: FailureMode;
 }
 
@@ -47,5 +48,9 @@ export interface Scenario {
   label: string;
   category: string;
   action: string;
+  surface?: string;
+  title?: string;
+  preview?: string;
+  user_state?: string | null;
   conversation_history: Message[];
 }
