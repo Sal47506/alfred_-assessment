@@ -192,6 +192,20 @@ def compute_risk(
             unsafe_action = True
             risk = 10
 
+    if any(
+        phrase in full_text
+        for phrase in (
+            "wire transfer",
+            "initiate wire",
+            "wire $",
+            "send the wire",
+            "transfer of $",
+            "transfer $",
+        )
+    ):
+        unsafe_action = True
+        risk = 10
+
     if action == "send_email" and is_external_or_sensitive(full_text):
         risk += 2
 
