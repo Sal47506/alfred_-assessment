@@ -2,6 +2,8 @@
 
 A FastAPI + React + shadcn prototype for deciding whether alfred_ should execute silently, execute and notify after, confirm, clarify, or refuse.
 
+Live demo: https://alfred-sal.fly.dev/
+
 ## What it does
 
 - Accepts a proposed action plus conversation context
