@@ -1,4 +1,4 @@
-app = "alfred-decision-layer-sal47506"
+app = "alfred-sal"
 primary_region = "iad"
 
 [build]

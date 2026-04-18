@@ -111,10 +111,6 @@ function requestFromScenario(scenario: Scenario): DecisionRequest {
   };
 }
 
-function preClassName(extra?: string) {
-  return cn("rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100", extra);
-}
-
 function surfaceOf(scenario: Scenario | null) {
   return scenario?.surface ?? "text";
 }
@@ -140,26 +136,49 @@ type ThreadProps = {
   action: string;
 };
 
-function TextThread({ messages }: { messages: Message[] }) {
+function TextThread({
+  messages,
+  scenario,
+}: {
+  messages: Message[];
+  scenario: Scenario | null;
+}) {
+  const contactName = scenario?.label ?? "alfred_";
+  const initial = contactName.trim().charAt(0).toUpperCase() || "A";
+
   return (
-    <div className="space-y-2 px-4 py-5">
-      {messages.map((message, index) => {
-        const mine = message.role === "user";
-        return (
-          <div key={index} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-            <div
-              className={cn(
-                "max-w-[78%] whitespace-pre-wrap break-words rounded-[22px] px-4 py-2.5 text-sm leading-6 shadow-sm",
-                mine
-                  ? "rounded-br-md bg-primary text-primary-foreground"
-                  : "rounded-bl-md bg-secondary text-secondary-foreground",
-              )}
-            >
-              {message.content || <span className="opacity-60">(empty)</span>}
+    <div className="bg-black text-white">
+      <div className="flex flex-col items-center border-b border-white/5 px-4 py-4">
+        <div className="mb-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-zinc-700 text-sm font-medium">
+          {initial}
+        </div>
+        <p className="text-xs font-medium text-white">{contactName}</p>
+        <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">iMessage</p>
+      </div>
+      <div className="space-y-1 px-3 py-4">
+        {messages.map((message, index) => {
+          const mine = message.role === "user";
+          const next = messages[index + 1];
+          const lastInRun = !next || next.role !== message.role;
+          return (
+            <div key={index} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "max-w-[75%] whitespace-pre-wrap break-words px-3.5 py-2 text-[15px] leading-5 rounded-[20px]",
+                  mine
+                    ? cn("bg-[#0A84FF] text-white", lastInRun && "rounded-br-[6px]")
+                    : cn("bg-[#2C2C2E] text-white", lastInRun && "rounded-bl-[6px]"),
+                )}
+              >
+                {message.content || <span className="opacity-60">(empty)</span>}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+        {messages.length > 0 && messages[messages.length - 1].role === "user" ? (
+          <p className="pr-3 pt-1 text-right text-[10px] text-zinc-500">Delivered</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -233,7 +252,7 @@ function CalendarPreview({ scenario, action, messages }: ThreadProps) {
           </div>
         </div>
       </div>
-      <TextThread messages={messages} />
+      <TextThread messages={messages} scenario={scenario} />
     </div>
   );
 }
@@ -241,7 +260,7 @@ function CalendarPreview({ scenario, action, messages }: ThreadProps) {
 function ConversationSurface(props: ThreadProps) {
   if (props.surface === "email") return <EmailThread messages={props.messages} />;
   if (props.surface === "calendar") return <CalendarPreview {...props} />;
-  return <TextThread messages={props.messages} />;
+  return <TextThread messages={props.messages} scenario={props.scenario} />;
 }
 
 export default function App() {
@@ -466,7 +485,12 @@ export default function App() {
               </CardHeader>
 
               <CardContent className="space-y-5 p-0">
-                <div className="border-b border-slate-800 bg-slate-950/40">
+                <div
+                  className={cn(
+                    "border-b border-slate-800",
+                    surface === "text" ? "bg-black" : "bg-slate-950/40",
+                  )}
+                >
                   <ConversationSurface
                     messages={payload.conversation_history}
                     surface={surface}
@@ -809,16 +833,6 @@ export default function App() {
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value="prompt">
-                    <AccordionTrigger>Exact prompt sent</AccordionTrigger>
-                    <AccordionContent>
-                      <ScrollArea className="h-[260px]">
-                        <div className={preClassName("whitespace-pre-wrap")}>
-                          {result.prompt_sent}
-                        </div>
-                      </ScrollArea>
-                    </AccordionContent>
-                  </AccordionItem>
                 </Accordion>
               ) : null}
             </div>
