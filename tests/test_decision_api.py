@@ -107,3 +107,89 @@ def test_failure_modes_use_safe_fallback(monkeypatch):
     assert malformed_response.status_code == 200
     assert malformed_response.json()["model_status"] == "fallback_malformed_output"
     assert malformed_response.json()["decision"] == "execute_notify"
+
+
+def test_llm_timeout_falls_back_to_deterministic(monkeypatch):
+    monkeypatch.setattr(signals, "get_client", lambda: None)
+
+    response = client.post(
+        "/api/decision",
+        json={
+            "action": "Set reminder for user at 9am tomorrow",
+            "simulate_failure": "timeout",
+            "conversation_history": [
+                {"role": "user", "content": "Remind me to take my medication tomorrow morning at 9am"},
+                {"role": "assistant", "content": "Set a 9am reminder?"},
+                {"role": "user", "content": "Yes please"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_status"] == "fallback_timeout"
+    assert body["fallback_reason"] == "LLM timed out."
+    assert body["decision"] == "execute_silent"
+
+
+def test_malformed_model_output_falls_back_to_deterministic(monkeypatch):
+    monkeypatch.setattr(signals, "get_client", lambda: None)
+
+    response = client.post(
+        "/api/decision",
+        json={
+            "action": "Send calendar invite to sarah@company.com for 3pm tomorrow",
+            "simulate_failure": "malformed",
+            "conversation_history": [
+                {"role": "user", "content": "Schedule a meeting with Sarah tomorrow at 3pm"},
+                {"role": "assistant", "content": "Drafted. Send?"},
+                {"role": "user", "content": "Yes go ahead"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_status"] == "fallback_malformed_output"
+    assert body["fallback_reason"] == "Model output was malformed."
+    assert body["decision"] in {"execute_silent", "execute_notify", "confirm"}
+
+
+def test_missing_critical_context_returns_clarify(monkeypatch):
+    monkeypatch.setattr(signals, "get_client", lambda: None)
+
+    response = client.post(
+        "/api/decision",
+        json={
+            "action": "Send it to them",
+            "simulate_failure": "missing_context",
+            "conversation_history": [
+                {"role": "user", "content": "Could you send it to them?"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "clarify"
+    assert body["model_status"] == "fallback_missing_context"
+    assert "Critical context" in body["fallback_reason"]
+
+
+def test_missing_params_naturally_triggers_clarify(monkeypatch):
+    monkeypatch.setattr(signals, "get_client", lambda: None)
+
+    response = client.post(
+        "/api/decision",
+        json={
+            "action": "Send email",
+            "conversation_history": [
+                {"role": "user", "content": "Can you send an update?"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "clarify"
+    assert "recipient" in body["signals"]["missing_params"]

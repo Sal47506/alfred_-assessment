@@ -696,6 +696,7 @@ export default function App() {
                             <option value="none">None</option>
                             <option value="timeout">LLM timeout</option>
                             <option value="malformed">Malformed model output</option>
+                            <option value="missing_context">Missing critical context</option>
                           </select>
                         </div>
                       </details>

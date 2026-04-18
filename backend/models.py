@@ -16,6 +16,7 @@ class FailureMode(str, Enum):
     NONE = "none"
     TIMEOUT = "timeout"
     MALFORMED = "malformed"
+    MISSING_CONTEXT = "missing_context"
 
 
 class Message(BaseModel):

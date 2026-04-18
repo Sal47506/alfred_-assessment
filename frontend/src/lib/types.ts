@@ -1,5 +1,5 @@
 export type Role = "user" | "assistant" | "system";
-export type FailureMode = "none" | "timeout" | "malformed";
+export type FailureMode = "none" | "timeout" | "malformed" | "missing_context";
 export type DecisionValue =
   | "execute_silent"
   | "execute_notify"

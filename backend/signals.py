@@ -357,6 +357,20 @@ def make_decision(request: DecideRequest) -> AgentResponse:
             raise TimeoutError("Simulated timeout")
         if request.simulate_failure == FailureMode.MALFORMED:
             raw_output = "decision=execute_notify rationale=plain text only"
+        elif request.simulate_failure == FailureMode.MISSING_CONTEXT:
+            rule = "Critical context missing; cannot decide without clarification."
+            return AgentResponse(
+                decision=Decision.CLARIFY,
+                rationale=(
+                    "The request is missing information required to act safely. "
+                    "alfred_ should ask a clarifying question before proceeding."
+                ),
+                prompt_sent="(model not called; deterministic guard returned clarify)",
+                signals=signals,
+                triggered_rules=[rule],
+                model_status="fallback_missing_context",
+                fallback_reason="Critical context is missing to make a safe decision.",
+            )
         else:
             client = get_client()
             if client is None:

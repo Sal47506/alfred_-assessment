@@ -6,23 +6,73 @@ Live demo: https://alfred-sal.fly.dev/
 
 ## What it does
 
-- Accepts a proposed action plus conversation context
-- Evaluates deterministic signals before asking the model for judgment
-- Shows the full pipeline in the UI:
-  - inputs
-  - computed signals and triggered rules
-  - exact prompt sent to the model
-  - raw model output
-  - final parsed decision
-- Ships with 6 preloaded scenarios:
-  - 2 easy
-  - 2 ambiguous
-  - 2 adversarial / risky
-- Exposes visible failure handling for:
-  - LLM timeout
-  - malformed model output
-  - missing critical context
-- Uses a React + shadcn frontend to make the pipeline easy to inspect
+- Accepts a proposed action plus conversation history and optional user state
+- Evaluates deterministic signals first, then asks the model for judgment
+- Treats the decision as a contextual conversation problem, not a one-shot classification
+- Shows the full pipeline in the UI (inputs, signals, triggered rules, final decision)
+- Ships with 10 preloaded scenarios (easy, ambiguous, adversarial, plus injection / social-engineering edge cases)
+- Exposes visible failure handling for LLM timeout, malformed output, and missing critical context
+- React + shadcn frontend renders scenarios as iOS messages, Gmail threads, or calendar invites
+
+## Execution Decision Layer
+
+Given a proposed action plus context, the system picks exactly one of five decisions:
+
+| Decision           | When it fires                                                                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execute_silent`   | Intent is resolved, action is reversible, `risk_score <= 3`, no contradictions, no unresolved entities, no missing params.                                              |
+| `execute_notify`   | Intent is resolved and `risk_score` is 4–7, or the action is irreversible but low risk. alfred_ acts, then tells the user what was done.                                |
+| `confirm`          | Intent is resolved but `risk_score >= 8`, or the target is external / sensitive. alfred_ asks the user to confirm before executing.                                     |
+| `clarify`          | Intent, entity, or key parameters are unresolved (`missing_params`, `unresolved_entities`, contradiction between hold and resume, or `intent_clear == False`).          |
+| `refuse`           | Policy disallows the action, or risk / uncertainty remains too high after clarification (bulk delete, wire transfer to a new vendor, etc.). alfred_ stops and escalates.|
+
+Framing boundaries, used in both the deterministic rules and the prompt:
+
+- **Clarify** when intent, entity, or key parameters are unresolved
+- **Confirm** when intent is resolved but risk is above the silent-execution threshold
+- **Refuse** when policy disallows it, or risk / uncertainty is still too high after clarification
+
+The decision always considers the full conversation history and the user state, not just the latest message.
+
+### Deterministic floor, model nudge
+
+1. Deterministic signals produce a safety floor decision (`signals.deterministic_decision`)
+2. The model can match the floor or be stricter, but never more lenient
+3. If the model suggests something riskier than the floor, the API keeps the safer deterministic decision and surfaces `model_status = guardrail_override` so the divergence is visible
+
+This is what lets the system be safe under both unreliable model output *and* model attempts to please the user past what policy allows.
+
+## Failure Cases
+
+The system treats failure as a first-class output. Every failure path is surfaced in the response as `model_status` and `fallback_reason`, and is selectable from the UI (Edit > Failure path demo).
+
+| Failure                       | Trigger                                                                 | System behavior                                                                                                                           | Final decision                                   |
+| ----------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| LLM timeout                   | `simulate_failure = "timeout"` or real `TimeoutError` from the OpenAI client | Raises a `TimeoutError` before the model reply is consumed. Caught, fallback to the deterministic floor. `model_status = fallback_timeout`. | Deterministic floor (never more lenient than it) |
+| Malformed model output        | `simulate_failure = "malformed"` or a real parse failure                | Model response is not valid JSON. `json.JSONDecodeError` / `KeyError` / `ValueError` caught. Fallback to deterministic floor. `model_status = fallback_malformed_output`. | Deterministic floor                              |
+| Missing critical context      | `simulate_failure = "missing_context"` or signals show `missing_params` / `unresolved_entities` / ambiguous intent | Model call is skipped. Returns `clarify` with a "Critical context missing" rule. `model_status = fallback_missing_context`.              | Always `clarify`                                 |
+| Model unavailable / no API key | No `OPEN_AI_KEY` configured                                             | `RuntimeError` raised from the client getter. Fallback to deterministic floor. `model_status = fallback_unavailable`.                     | Deterministic floor                              |
+
+### Demonstrations
+
+- Run any scenario and pick **LLM timeout** in the failure dropdown — the dialog shows `fallback_timeout`, decision defaults to the deterministic floor.
+- Pick **Malformed model output** — the model is fed a non-JSON response; the JSON parser throws, fallback kicks in, decision stays at the deterministic floor.
+- Pick **Missing critical context** — the model call is skipped entirely; system returns `clarify`.
+- Or naturally: send `action = "Send email"` with no recipient — signals detect `missing_params: ["recipient"]`, decision is `clarify` without ever needing the fake failure toggle.
+
+The full behavior is covered by tests in `tests/test_decision_api.py`:
+
+- `test_llm_timeout_falls_back_to_deterministic`
+- `test_malformed_model_output_falls_back_to_deterministic`
+- `test_missing_critical_context_returns_clarify`
+- `test_missing_params_naturally_triggers_clarify`
+- `test_failure_modes_use_safe_fallback`
+- `test_conflicting_history_triggers_clarification`
+- `test_bulk_delete_is_refused`
+- `test_low_risk_reminder_executes_silently`
+- `test_scenarios_endpoint_returns_required_seed_data`
+
+The default posture across every failure path: never upgrade to a more lenient decision than the deterministic floor. Irreversible actions never silently execute when uncertainty remains.
 
 ## Signals used, and why
 
@@ -70,15 +120,6 @@ The prompt is intentionally short and structured:
 - the response schema is forced to strict JSON
 
 This keeps the model focused on judgment rather than extraction.
-
-## Failure modes
-
-- **LLM timeout**: fall back to the deterministic safe decision
-- **Malformed model output**: fall back to the deterministic safe decision
-- **Missing critical context**: return `clarify`
-- **Model unavailable / missing API key**: return the deterministic safe decision and surface the fallback in the UI
-
-Default behavior avoids irreversible execution when uncertainty remains.
 
 ## Running locally
 
