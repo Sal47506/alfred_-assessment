@@ -1,0 +1,30 @@
+{
+    "hold_phrases": [
+        "hold off",
+        "wait",
+        "don't send",
+        "do not send",
+        "pause",
+        "stop",
+        "cancel that",
+        "never mind",
+        "hold on",
+        "not yet",
+        "wait for",
+        "pending",
+        "until",
+        "before you send",
+        "don't do that"
+    ],
+    "resume_phrases": [
+        "go ahead",
+        "send it",
+        "yes send",
+        "ok send",
+        "you can send",
+        "send now",
+        "do it",
+        "proceed",
+        "yes go ahead"
+    ]
+}
