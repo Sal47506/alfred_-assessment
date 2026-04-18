@@ -674,41 +674,39 @@ export default function App() {
                         </div>
                       </div>
 
-                      <details className="rounded-2xl border border-slate-800 p-4">
-                        <summary className="cursor-pointer text-sm font-medium">
-                          Failure path demo
-                        </summary>
-                        <div className="mt-4 space-y-2">
-                          <Label htmlFor="failure-mode">
-                            Show what happens when the model fails
-                          </Label>
-                          <select
-                            id="failure-mode"
-                            className={selectClassName}
-                            value={payload.simulate_failure}
-                            onChange={(event) =>
-                              setPayload((current) => ({
-                                ...current,
-                                simulate_failure: event.target.value as FailureMode,
-                              }))
-                            }
-                          >
-                            <option value="none">None</option>
-                            <option value="timeout">LLM timeout</option>
-                            <option value="malformed">Malformed model output</option>
-                            <option value="missing_context">Missing critical context</option>
-                          </select>
-                        </div>
-                      </details>
                     </div>
                   ) : null}
 
-                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+                  <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="failure-mode" className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Failure path demo
+                      </Label>
+                      <select
+                        id="failure-mode"
+                        className={cn(selectClassName, "max-w-sm")}
+                        value={payload.simulate_failure}
+                        onChange={(event) =>
+                          setPayload((current) => ({
+                            ...current,
+                            simulate_failure: event.target.value as FailureMode,
+                          }))
+                        }
+                      >
+                        <option value="none">None (use real model)</option>
+                        <option value="timeout">LLM timeout</option>
+                        <option value="malformed">Malformed model output</option>
+                        <option value="missing_context">Missing critical context</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground">
+                        Pick one to see the fallback path. Result appears in the decision popup.
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       onClick={submit}
                       disabled={isLoading || !payload.action.trim()}
-                      className="min-w-[200px]"
+                      className="min-w-[200px] self-end"
                     >
                       {isLoading ? (
                         <>
