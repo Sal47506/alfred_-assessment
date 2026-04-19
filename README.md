@@ -157,16 +157,18 @@ python3 -m pytest tests -q
 
 ## How I would evolve this as alfred_ gains riskier tools
 
-- replace heuristic risk scoring with tool-specific policy objects
-- add durable user trust / preference state instead of stateless request fields
-- log decisions, overrides, and user corrections for offline calibration
-- split policy review, execution planning, and action authorization into separate stages
-- add evaluator suites for policy regressions and conversation-history traps
+alfred_ today gates every outbound action behind explicit user approval. As tools move past "draft a reply" into "send the wire, cancel the meeting, archive the thread," the decision layer needs to do more than classify urgency:
+
+- Replace the single heuristic risk score with a **typed tool catalog**. Every tool declares reversibility, blast radius, financial exposure, and data sensitivity. The silent / notify / confirm / clarify / refuse floor becomes a function of the tool, not the prompt.
+- Replace the stateless `user_state` field with a **trust profile** that updates from real corrections. Heavy edits on the last 3 drafts → raise the confirm threshold for that tool. Explicit "just send it next time" → lower it. Same action, different users, different floors.
+- Require **out-of-band confirmation** for the top risk tier (SMS OTP or passkey, with expiry) so spoofed chat context alone cannot unlock destructive actions.
+- Ship a **red-team evaluator in CI**: prompt injection, impersonation, urgency pressure, and compound / smuggled actions run on every policy change. The scenarios in `backend/scenarios.json` are the seed set.
+- Add an **append-only decision log** (input, signals, prompt, model output, chosen decision, any override) that supports offline calibration and is exportable for compliance.
 
 ## What I would build in the next 6 months
 
-1. Per-tool policy engine with explicit capability boundaries
-2. Decision-memory layer for user preferences and prior corrections
-3. Better entity resolution tied to product objects like drafts, calendar events, and reminder IDs
-4. Offline evals and replay tooling for regression testing
-5. Human-review queues for high-risk or escalated actions
+1. **Tool catalog with per-tool policy objects**. Replace `RISK_LEVELS` with structured policy (`reversibility`, `blast_radius`, `financial_exposure`, `regulated_data`) so each new tool ships with a declared floor instead of retrofitted keyword matching.
+2. **Trust profile per user**, updated from production corrections (edits, rejections, explicit "stop asking" acknowledgments). Decisions become conditional on a durable signal instead of a single request field.
+3. **Out-of-band confirmation** for the top-risk tier (wires, bulk deletes, external legal / financial sends), with short expiry and a separate channel.
+4. **Shadow + replay evaluation**. Pipe the last 30 days of real decisions through any candidate policy, diff the outcomes, and block promotion if a silent → refuse flip appears or the injection benchmark regresses.
+5. **Signed decision audit log**. Every executed action leaves a full explainable trace behind it — useful for SOC 2 exports, user-facing "why did alfred_ do this" answers, and offline calibration when the model is retrained.
